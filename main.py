@@ -19,7 +19,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from argparse import Namespace
 
-from torch.utils.data import DataLoader, TensorDataset, IterableDataset
+from torch.utils.data import DataLoader, TensorDataset, IterableDataset, get_worker_info
 from torch.utils.data.distributed import DistributedSampler
 
 from tgcn import TGCN
@@ -77,6 +77,18 @@ num_timesteps_output = args.num_timesteps_output
 early_stop_rounds = args.early_stop_rounds
 
 
+class ParallelNeighborSampler(NeighborSampler):
+    def __init__(self, **kwargs):
+        super(ParallelNeighborSampler, self).__init__(**kwargs)
+    
+    def __getitem__(self, n_id):
+        if self.bipartite:
+            produce = self.__produce_bipartite_data_flow__
+        else:
+            produce = self.__produce_subgraph__
+
+        return produce(n_id)        
+
 class NeighborSampleDataset(IterableDataset):
     def __init__(self, X, y, edge_index, edge_weight, num_nodes, batch_size, shuffle):
         self.X = X
@@ -87,20 +99,25 @@ class NeighborSampleDataset(IterableDataset):
         self.num_nodes = num_nodes
 
         self.batch_size = batch_size
+        self.num_batches = (len(X) + self.batch_size -
+                           1) // self.batch_size
         self.shuffle = shuffle
 
         self.graph_sampler = self.make_graph_sampler()
-
+        self.graph_batches = self.graph_sampler.__get_batches__()
         self.length = self.get_length()
+
+        self.start = 0
+        self.end = self.length
 
     def make_graph_sampler(self):
         graph = Data(
             edge_index=self.edge_index, edge_attr=self.edge_weight, num_nodes=self.num_nodes
         ) .to('cpu')
 
-        graph_sampler = NeighborSampler(
+        graph_sampler = ParallelNeighborSampler(
             # graph, size=[5, 5], num_hops=2, batch_size=100, shuffle=self.shuffle, add_self_loops=True
-            graph, size=[10, 15], num_hops=2, batch_size=250, shuffle=self.shuffle, add_self_loops=True
+            data=graph, size=[10, 15], num_hops=2, batch_size=250, shuffle=self.shuffle, add_self_loops=True
         )
 
         return graph_sampler
@@ -129,7 +146,21 @@ class NeighborSampleDataset(IterableDataset):
         return graph
 
     def __iter__(self):
-        for data_flow in self.graph_sampler():
+        worker_info = get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            iter_start = self.start
+            iter_end = self.end
+        else:  
+            # in a worker process
+            # split workload
+            per_worker = int(math.ceil((self.end - self.start) / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            iter_start = self.start + worker_id * per_worker
+            iter_end = min(iter_start + per_worker, self.end)
+
+        indices = self.graph_batches[iter_start:iter_end]
+        for graph_batch_id in indices:
+            data_flow = self.graph_sampler[graph_batch_id]
             g = self.sample_subgraph(data_flow)
             X, y = self.X[:, g['graph_n_id']], self.y[:, g['cent_n_id']]
 
@@ -139,20 +170,13 @@ class NeighborSampleDataset(IterableDataset):
             if self.shuffle:
                 np.random.shuffle(indices)
 
-            num_batches = (len(subset) + self.batch_size -
-                           1) // self.batch_size
-
-            for batch_id in range(num_batches):
+            for batch_id in range(self.num_batches):
                 start = batch_id * self.batch_size
                 end = (batch_id + 1) * self.batch_size
                 yield X[indices[start: end]], y[indices[start: end]], g, indices[start: end]
 
     def get_length(self):
-        length = 0
-        for data_flow in self.graph_sampler():
-            g = self.sample_subgraph(data_flow)
-            length += (self.y.size(0) + self.batch_size - 1) // self.batch_size
-        return length
+        return len(self.graph_batches) * self.num_batches
 
     def __len__(self):
         return self.length
@@ -331,7 +355,7 @@ if __name__ == '__main__':
     trainer = pl.Trainer(
         gpus=gpus,
         max_epochs=epochs,
-        distributed_backend='ddp',
+        distributed_backend='dp',
         early_stop_callback=early_stop_callback,
         logger=logger,
         track_grad_norm=2
