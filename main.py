@@ -108,7 +108,7 @@ class NeighborSampleDataset(IterableDataset):
         self.length = self.get_length()
 
         self.start = 0
-        self.end = self.length
+        self.end = len(self.graph_batches)
 
     def make_graph_sampler(self):
         graph = Data(
