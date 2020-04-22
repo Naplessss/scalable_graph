@@ -145,3 +145,25 @@ class SAGENet(nn.Module):
         X = F.leaky_relu(conv2)
         X = X.permute(1, 0, 2)
         return X
+
+class ClusterSAGENet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(ClusterSAGENet, self).__init__()
+        self.conv1 = MySAGEConv(
+            in_channels, out_channels, normalized=False, concat=True)
+        self.conv2 = MySAGEConv(
+            out_channels, out_channels, normalized=False, concat=True)
+
+    def forward(self, X, g):
+
+        edge_index = g['edge_index']
+        edge_weight = g['edge_weight']
+
+        # swap node to dim 0
+        X = X.permute(1, 0, 2)
+
+        X = F.leaky_relu(self.conv1(X, edge_index, edge_weight = edge_weight))
+        X = F.leaky_relu(self.conv2(X, edge_index, edge_weight = edge_weight))
+        X = X.permute(1, 0, 2)
+        return X
+
