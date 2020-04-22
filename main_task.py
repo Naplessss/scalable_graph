@@ -165,7 +165,7 @@ class SpatialTemporalTask(BasePytorchTask):
 
     def build_train_dataloader(self):
         return self.make_sample_dataloader(
-            self.training_input, self.training_target, shuffle=True, use_dist_sampler=False
+            self.training_input, self.training_target, shuffle=True, use_dist_sampler=True
         )
 
     def build_val_dataloader(self):
