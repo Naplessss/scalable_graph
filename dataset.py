@@ -135,7 +135,7 @@ class ClusterDataset(IterableDataset):
         ).to('cpu')
 
         cluster_data = ClusterData(
-            graph, num_parts=50, recursive=False, save_dir='./data'
+            graph, num_parts=50, recursive=False, save_dir=None
         )
 
         cluster_loader = ClusterLoader(cluster_data, batch_size=10, shuffle=True, num_workers=0)
