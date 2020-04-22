@@ -139,7 +139,7 @@ class STGCN(nn.Module):
         :param A: Normalized adjacency matrix.
         """
         out1 = self.block1(X, g)
-        out2 = self.block2(out1, g)
-        out3 = self.last_temporal(out2)
+        # out2 = self.block2(out1, g)
+        out3 = self.last_temporal(out1)
         out4 = self.fully(out3.reshape((out3.shape[0], out3.shape[1], -1)))
         return out4
