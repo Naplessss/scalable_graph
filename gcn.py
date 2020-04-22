@@ -150,9 +150,9 @@ class ClusterSAGENet(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(ClusterSAGENet, self).__init__()
         self.conv1 = MySAGEConv(
-            in_channels, out_channels, normalized=False, concat=True)
+            in_channels, out_channels, normalize=False, concat=True)
         self.conv2 = MySAGEConv(
-            out_channels, out_channels, normalized=False, concat=True)
+            out_channels, out_channels, normalize=False, concat=True)
 
     def forward(self, X, g):
 

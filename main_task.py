@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from tgcn import TGCN
+from stgcn import STGCN
 from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
 from dataset import NeighborSampleDataset,ClusterDataset
 from base_task import add_config_to_argparse, BaseConfig, BasePytorchTask, \
@@ -48,7 +49,7 @@ class STConfig(BaseConfig):
 def get_model_class(model):
     return {
         'tgcn': TGCN,
-        # 'stgcn': STGCN,
+        'stgcn': STGCN,
         # 'gwnet': GWNET,
     }.get(model)
 

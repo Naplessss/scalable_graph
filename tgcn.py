@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gcn import SAGENet, GATNet
+from gcn import SAGENet, GATNet, ClusterSAGENet
 from egnn import SAGELANet, ClusterSAGELANet, GatedGCNNet, ClusterGatedGCNNet, MyEGNNNet
 from krnn import KRNN
 
@@ -16,7 +16,7 @@ class GCNBlock(nn.Module):
         if gcn_partition == 'cluster':
             GCNUnit = {'sagela': ClusterSAGELANet, 
                         'gated': ClusterGatedGCNNet,
-                        'cluster_sage': ClusterSAGELANet}.get(gcn_type)
+                        'cluster_sage': ClusterSAGENet}.get(gcn_type)
         elif gcn_partition == 'sample':
             GCNUnit = {'sage': SAGENet, 
                         'gat': GATNet, 

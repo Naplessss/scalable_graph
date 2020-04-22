@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from gcn import SAGENet, GATNet
+from gcn import SAGENet, GATNet, ClusterSAGENet
 from egnn import SAGELANet, ClusterSAGELANet, GatedGCNNet, ClusterGatedGCNNet
 from my_conv import Conv2dSame as Conv2d
 
@@ -69,7 +69,7 @@ class STGCNBlock(nn.Module):
         if gcn_partition == 'cluster':
             GCNUnit = {'sagela': ClusterSAGELANet, 
                         'gated': ClusterGatedGCNNet,
-                        'cluset_sage': ClusterSAGELANet}.get(gcn_type)
+                        'cluster_sage': ClusterSAGENet}.get(gcn_type)
         elif gcn_partition == 'sample':
             GCNUnit = {'sage': SAGENet, 
                         'gat': GATNet, 
@@ -109,8 +109,8 @@ class STGCN(nn.Module):
 
     def __init__(self, num_nodes, num_edges, num_features, 
                 num_timesteps_input, num_timesteps_output, 
-                gcn_type='cheb', gcn_package='pyg',
-                gcn_partition=None, **kwargs):
+                gcn_type='cheb', gcn_partition=None,
+                gcn_package='pyg', **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
         :param num_features: Number of features at each node in each time step.
@@ -129,7 +129,7 @@ class STGCN(nn.Module):
                                  gcn_type=gcn_type, gcn_package=gcn_package,
                                  gcn_partition=gcn_partition)
         self.last_temporal = TimeBlock(in_channels=64, out_channels=64)
-        self.fully = nn.Linear((num_timesteps_input - 2 * 5) * 64,
+        self.fully = nn.Linear(num_timesteps_input * 64,
                                num_timesteps_output)
 
     def forward(self, X, g):
