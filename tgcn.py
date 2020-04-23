@@ -10,7 +10,7 @@ from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, Clust
 
 
 class GCNBlock(nn.Module):
-    def __init__(self, in_channels, spatial_channels, num_nodes,
+    def __init__(self, in_channels, spatial_channels, skip_connection, num_nodes,
                  gcn_type, gcn_partition):
         super(GCNBlock, self).__init__()
         if gcn_partition == 'cluster':
@@ -23,8 +23,13 @@ class GCNBlock(nn.Module):
                         'sagela': SAGELANet, 
                         'gated': GatedGCNNet,
                         'my': MyEGNNNet}.get(gcn_type)
-        self.gcn = GCNUnit(in_channels=in_channels,
-                           out_channels=spatial_channels)
+        if gcn_type in ['sage','cluster_sage']:
+            self.gcn = GCNUnit(in_channels=in_channels,
+                                out_channels=spatial_channels,
+                                skip_connection=skip_connection)
+        else:
+            self.gcn = GCNUnit(in_channels=in_channels,
+                            out_channels=spatial_channels)
 
     def forward(self, X, g):
         """
@@ -45,7 +50,7 @@ class GCNBlock(nn.Module):
 
 class TGCN(nn.Module):
     def __init__(self, num_nodes, num_edges, num_features,
-                 num_timesteps_input, num_timesteps_output,
+                 num_timesteps_input, num_timesteps_output, skip_connection = False,
                  gcn_type='sage', gcn_partition='sample', hidden_size=64, **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
@@ -60,6 +65,7 @@ class TGCN(nn.Module):
 
         self.gcn = GCNBlock(in_channels=num_features,
                             spatial_channels=hidden_size,
+                            skip_connection=skip_connection,
                             num_nodes=num_nodes,
                             gcn_type=gcn_type,
                             gcn_partition=gcn_partition)

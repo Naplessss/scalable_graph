@@ -43,6 +43,7 @@ class STConfig(BaseConfig):
         self.loss = 'mse'  # choices: mse, mae
         self.num_timesteps_input = 12  # the length of the input time-series sequence
         self.num_timesteps_output = 3  # the length of the output time-series sequence
+        self.skip_connection = False  # whether to use skip connection in gcn 
         self.lr = 1e-3  # the learning rate
 
 
@@ -75,6 +76,7 @@ class WrapperNet(nn.Module):
             config.num_features,
             config.num_timesteps_input,
             config.num_timesteps_output,
+            config.skip_connection,
             config.gcn,
             gcn_partition
         )

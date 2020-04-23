@@ -117,12 +117,14 @@ class MySAGEConv(PyG.SAGEConv):
 
 
 class SAGENet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, skip_connection=True):
         super(SAGENet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = out_channels * 2 if self.skip_connection else out_channels
         self.conv1 = MySAGEConv(
-            in_channels, 16, normalize=False, concat=True)
+            in_channels, out_channels, normalize=False, concat=True)
         self.conv2 = MySAGEConv(
-            16, out_channels, normalize=False, concat=True)
+            conv2_in_channels, out_channels, normalize=False, concat=True)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
@@ -137,7 +139,10 @@ class SAGENet(nn.Module):
         conv1 = self.conv1(
             (X, None), edge_index[0], edge_weight=edge_weight[0], size=size[0], res_n_id=res_n_id[0])
 
-        X = F.leaky_relu(conv1)
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(conv1), conv1), dim = -1)
+        else:
+            X = F.leaky_relu(conv1)
 
         conv2 = self.conv2(
             (X, None), edge_index[1], edge_weight=edge_weight[1], size=size[1], res_n_id=res_n_id[1])
@@ -147,12 +152,15 @@ class SAGENet(nn.Module):
         return X
 
 class ClusterSAGENet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, skip_connection=True):
         super(ClusterSAGENet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = out_channels * 2 if self.skip_connection else out_channels
         self.conv1 = MySAGEConv(
             in_channels, out_channels, normalize=False, concat=True)
         self.conv2 = MySAGEConv(
-            out_channels, out_channels, normalize=False, concat=True)
+            conv2_in_channels, out_channels, normalize=False, concat=True)
+
 
     def forward(self, X, g):
 
@@ -161,7 +169,11 @@ class ClusterSAGENet(nn.Module):
 
         # swap node to dim 0
         X = X.permute(1, 0, 2)
-
+        c1 = self.conv1(X, edge_index, edge_weight = edge_weight)
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(c1), c1), dim = -1)
+        else:
+            X = F.leaky_relu(c1)
         X = F.leaky_relu(self.conv1(X, edge_index, edge_weight = edge_weight))
         X = F.leaky_relu(self.conv2(X, edge_index, edge_weight = edge_weight))
         X = X.permute(1, 0, 2)
