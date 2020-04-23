@@ -174,7 +174,6 @@ class ClusterSAGENet(nn.Module):
             X = torch.cat((F.leaky_relu(c1), c1), dim = -1)
         else:
             X = F.leaky_relu(c1)
-        X = F.leaky_relu(self.conv1(X, edge_index, edge_weight = edge_weight))
         X = F.leaky_relu(self.conv2(X, edge_index, edge_weight = edge_weight))
         X = X.permute(1, 0, 2)
         return X
