@@ -56,13 +56,15 @@ class MyGATConv(PyG.GATConv):
 
 
 class GATNet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
         super(GATNet, self).__init__()
         heads = 4
+        self.skip_connection =skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = MyGATConv(in_channels=in_channels,
-                               out_channels=16, heads=heads, concat=False)
+                               out_channels=spatial_channels, heads=heads, concat=False)
                                
-        self.conv2 = MyGATConv(in_channels=16,
+        self.conv2 = MyGATConv(in_channels=conv2_in_channels,
                                out_channels=out_channels, heads=heads, concat=False)
 
     def forward(self, X, g):
@@ -78,10 +80,48 @@ class GATNet(nn.Module):
         conv1 = self.conv1(
             (X, X[res_n_id[0]]), edge_index[0], edge_weight=edge_weight[0], size=size[0])
 
-        X = F.leaky_relu(conv1)
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(conv1), conv1), dim=-1)
+        else:
+            X = F.leaky_relu(conv1)
 
         conv2 = self.conv2(
             (X, X[res_n_id[1]]), edge_index[1], edge_weight=edge_weight[1], size=size[1])
+
+        X = F.leaky_relu(conv2)
+
+        X = X.permute(1, 0, 2)
+        return X
+
+class ClusterGATNet(nn.Module):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
+        super(ClusterGATNet, self).__init__()
+        heads = 4
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
+        self.conv1 = MyGATConv(in_channels=in_channels,
+                               out_channels=spatial_channels, heads=heads, concat=False)
+                               
+        self.conv2 = MyGATConv(in_channels=conv2_in_channels,
+                               out_channels=out_channels, heads=heads, concat=False)
+
+    def forward(self, X, g):
+        edge_index = g['edge_index']
+        edge_weight = g['edge_weight']
+
+        # swap node to dim 0
+        X = X.permute(1, 0, 2)
+
+        conv1 = self.conv1(
+            X, edge_index, edge_weight=edge_weight)
+
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(conv1), conv1), dim=-1)
+        else:
+            X = F.leaky_relu(conv1)
+
+        conv2 = self.conv2(
+            X, edge_index, edge_weight=edge_weight)
 
         X = F.leaky_relu(conv2)
 
@@ -93,6 +133,12 @@ class MySAGEConv(PyG.SAGEConv):
     def __init__(self, in_channels, out_channels, normalize=False, concat=False, bias=True, **kwargs):
         super(MySAGEConv, self).__init__(in_channels, out_channels,
                                          normalize=normalize, concat=concat, bias=bias, **kwargs)
+
+
+    def forward(self, x, edge_index, edge_weight=None, size=None,
+                res_n_id=None):
+        return self.propagate(edge_index, size=size, x=x,
+                              edge_weight=edge_weight, res_n_id=res_n_id)
 
     def message(self, x_j, edge_weight):
         return x_j if edge_weight is None else edge_weight.view(-1, 1, 1) * x_j
@@ -117,12 +163,12 @@ class MySAGEConv(PyG.SAGEConv):
 
 
 class SAGENet(nn.Module):
-    def __init__(self, in_channels, out_channels, skip_connection=True):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=True):
         super(SAGENet, self).__init__()
         self.skip_connection = skip_connection
-        conv2_in_channels = out_channels * 2 if self.skip_connection else out_channels
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = MySAGEConv(
-            in_channels, out_channels, normalize=False, concat=True)
+            in_channels, spatial_channels, normalize=False, concat=True)
         self.conv2 = MySAGEConv(
             conv2_in_channels, out_channels, normalize=False, concat=True)
 
@@ -152,12 +198,12 @@ class SAGENet(nn.Module):
         return X
 
 class ClusterSAGENet(nn.Module):
-    def __init__(self, in_channels, out_channels, skip_connection=True):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=True):
         super(ClusterSAGENet, self).__init__()
         self.skip_connection = skip_connection
-        conv2_in_channels = out_channels * 2 if self.skip_connection else out_channels
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = MySAGEConv(
-            in_channels, out_channels, normalize=False, concat=True)
+            in_channels, spatial_channels, normalize=False, concat=True)
         self.conv2 = MySAGEConv(
             conv2_in_channels, out_channels, normalize=False, concat=True)
 

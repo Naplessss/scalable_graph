@@ -46,9 +46,9 @@ class GCNBlock(nn.Module):
         return out
 
 
-class TGCN(nn.Module):
+class Sandwich(nn.Module):
     def __init__(self, num_nodes, num_edges, num_features,
-                 num_timesteps_input, num_timesteps_output, skip_connection = False,
+                 num_timesteps_input, num_timesteps_output, skip_connection=False,
                  gcn_type='sage', gcn_partition='sample', hidden_size=64, **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
@@ -58,10 +58,12 @@ class TGCN(nn.Module):
         :param num_timesteps_output: Desired number of future time steps
         output by the network.
         """
-        super(TGCN, self).__init__()
+        super(Sandwich, self).__init__()
         self.gcn_partition = gcn_partition
 
-        self.gcn = GCNBlock(in_channels=num_features,
+        self.gru1 = KRNN(num_nodes, num_features, num_timesteps_input, num_timesteps_output=None, hidden_size=hidden_size)
+
+        self.gcn = GCNBlock(in_channels=hidden_size,
                             spatial_channels=hidden_size,
                             skip_connection=skip_connection,
                             num_nodes=num_nodes,
@@ -77,7 +79,12 @@ class TGCN(nn.Module):
         num_features=in_channels).
         :param A_hat: Normalized adjacency matrix.
         """
-        out1 = self.gcn(X, g)
-        out2 = self.gru(out1, g['cent_n_id'])
+        if self.gcn_partition == 'sample':
+            out1 = self.gru1(X, g['graph_n_id'])
+        else:
+            out1 = self.gru1(X, g['cent_n_id'])
+        out2 = self.gcn(out1, g)
+        out3 = self.gru(out2, g['cent_n_id'])
+        out3 = out3.squeeze(dim=-1)
 
-        return out2
+        return out3

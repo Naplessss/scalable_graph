@@ -55,12 +55,14 @@ class SAGELA(PyG.SAGEConv):
 
 
 class SAGELANet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
         super(SAGELANet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = SAGELA(
             in_channels, spatial_channels, edge_channels=1, node_dim=1)
         self.conv2 = SAGELA(
-            spatial_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
@@ -72,7 +74,10 @@ class SAGELANet(nn.Module):
         X = self.conv1(
             (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0].unsqueeze(-1), size=size[0])
 
-        X = F.leaky_relu(X)
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(X), X), dim=-1)
+        else:
+            X = F.leaky_relu(X)
 
         X = self.conv2(
             (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
@@ -81,19 +86,26 @@ class SAGELANet(nn.Module):
 
 
 class ClusterSAGELANet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
         super(ClusterSAGELANet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = SAGELA(
             in_channels, spatial_channels, edge_channels=1, node_dim=1)
         self.conv2 = SAGELA(
-            spatial_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
         edge_weight = g['edge_weight']
 
         X = self.conv1(X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
-    
+
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(X), X), dim=-1)
+        else:
+            X = F.leaky_relu(X)  
+
         X = self.conv2(X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
 
         return X
@@ -118,8 +130,8 @@ class GatedGCN(MessagePassing):
         self.u = nn.Parameter(torch.Tensor(out_channels, out_channels))
         self.v = nn.Parameter(torch.Tensor(out_channels, out_channels))
 
-        self.batch_norm = nn.BatchNorm1d(num_features=out_channels)
-        self.layer_norm = nn.LayerNorm(normalized_shape=out_channels)
+        # self.batch_norm = nn.BatchNorm1d(num_features=out_channels)
+        # self.layer_norm = nn.LayerNorm(normalized_shape=out_channels)
 
         self.reset_parameters()
     
@@ -151,11 +163,10 @@ class GatedGCN(MessagePassing):
 
         aggr_out = torch.matmul(x, self.u) + aggr_out
 
-        # sz = aggr_out.shape
-        # bn = nn.BatchNorm1d(sz[1]).to(x.device)
-        # aggr_out = bn(aggr_out)
+        bn = nn.BatchNorm1d(aggr_out.shape[1]).to(x.device)
+        aggr_out = bn(aggr_out)
         # aggr_out = self.batch_norm(aggr_out.view(-1, self.out_channels)).view(sz)
-        aggr_out = self.layer_norm(aggr_out)
+        # aggr_out = self.layer_norm(aggr_out)
         
         aggr_out = x + F.relu(aggr_out)
         
@@ -163,12 +174,14 @@ class GatedGCN(MessagePassing):
 
 
 class GatedGCNNet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
         super(GatedGCNNet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = GatedGCN(
             in_channels, spatial_channels, edge_channels=1, node_dim=1)
         self.conv2 = GatedGCN(
-            spatial_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
@@ -180,6 +193,11 @@ class GatedGCNNet(nn.Module):
         X = self.conv1(
             (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0].unsqueeze(-1), size=size[0])
 
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(X), X), dim=-1)
+        else:
+            X = F.leaky_relu(X) 
+
         X = self.conv2(
             (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
 
@@ -187,18 +205,23 @@ class GatedGCNNet(nn.Module):
 
 
 class ClusterGatedGCNNet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
         super(ClusterGatedGCNNet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = GatedGCN(
             in_channels, spatial_channels, edge_channels=1, node_dim=1)
         self.conv2 = GatedGCN(
-            spatial_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
         edge_weight = g['edge_weight']
-
         X = self.conv1(X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(X), X), dim=-1)
+        else:
+            X = F.leaky_relu(X) 
 
         X = self.conv2(X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
 
@@ -268,12 +291,14 @@ class MyEGNNConv(MessagePassing):
 
 
 class MyEGNNNet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
         super(MyEGNNNet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = MyEGNNConv(
             in_channels, spatial_channels, edge_channels=1, node_dim=1)
         self.conv2 = MyEGNNConv(
-            spatial_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
@@ -285,7 +310,39 @@ class MyEGNNNet(nn.Module):
         X = self.conv1(
             (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0].unsqueeze(-1), size=size[0])
 
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(X), X), dim=-1)
+        else:
+            X = F.leaky_relu(X) 
+
         X = self.conv2(
             (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
+
+        return X
+
+class ClusterMyEGNNNet(nn.Module):
+    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
+        super(ClusterMyEGNNNet, self).__init__()
+        self.skip_connection = skip_connection
+        conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
+        self.conv1 = MyEGNNConv(
+            in_channels, spatial_channels, edge_channels=1, node_dim=1)
+        self.conv2 = MyEGNNConv(
+            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
+
+    def forward(self, X, g):
+        edge_index = g['edge_index']
+        edge_weight = g['edge_weight']
+
+        X = self.conv1(
+            X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
+
+        if self.skip_connection:
+            X = torch.cat((F.leaky_relu(X), X), dim=-1)
+        else:
+            X = F.leaky_relu(X) 
+
+        X = self.conv2(
+            X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
 
         return X
