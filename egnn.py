@@ -31,7 +31,7 @@ class SAGELA(PyG.SAGEConv):
         lamb_in = torch.cat([x_i, x_j, edge_feature.repeat(x_j.shape[0], 1, 1)], dim=-1)
         lamb = torch.sigmoid(self.gate_linear(lamb_in))
 
-        # amplifier
+        # amplifiew
         amp = torch.matmul(edge_feature, self.amp_weight)
         amp_x_j = amp * x_j
 
@@ -313,7 +313,7 @@ class MyEGNNNet(nn.Module):
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
         else:
-            X = F.leaky_relu(X) 
+            X = F.leaky_relu(X) + X
 
         X = self.conv2(
             (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
@@ -340,7 +340,7 @@ class ClusterMyEGNNNet(nn.Module):
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
         else:
-            X = F.leaky_relu(X) 
+            X = F.leaky_relu(X) + X
 
         X = self.conv2(
             X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
