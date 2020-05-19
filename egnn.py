@@ -313,7 +313,8 @@ class MyEGNNNet(nn.Module):
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
         else:
-            X = F.leaky_relu(X) + X
+            # X = F.leaky_relu(X) + X
+            X = X
 
         X = self.conv2(
             (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
@@ -340,7 +341,8 @@ class ClusterMyEGNNNet(nn.Module):
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
         else:
-            X = F.leaky_relu(X) + X
+            # X = F.leaky_relu(X) + X
+            X = X
 
         X = self.conv2(
             X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
