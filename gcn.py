@@ -83,7 +83,7 @@ class GATNet(nn.Module):
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(conv1), conv1), dim=-1)
         else:
-            X = F.leaky_relu(conv1)
+            X = F.leaky_relu(conv1) + conv1
 
         conv2 = self.conv2(
             (X, X[res_n_id[1]]), edge_index[1], edge_weight=edge_weight[1], size=size[1])
@@ -118,7 +118,7 @@ class ClusterGATNet(nn.Module):
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(conv1), conv1), dim=-1)
         else:
-            X = F.leaky_relu(conv1)
+            X = F.leaky_relu(conv1) + conv1
 
         conv2 = self.conv2(
             X, edge_index, edge_weight=edge_weight)
