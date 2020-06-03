@@ -10,7 +10,7 @@ from torch_geometric.data import Data, Batch, DataLoader, NeighborSampler, Clust
 
 
 class GCNBlock(nn.Module):
-    def __init__(self, in_channels, spatial_channels, skip_connection, num_nodes,
+    def __init__(self, in_channels, spatial_channels, edge_channels, skip_connection, num_nodes,
                  gcn_type, gcn_partition):
         super(GCNBlock, self).__init__()
         if gcn_partition == 'cluster':
@@ -25,9 +25,15 @@ class GCNBlock(nn.Module):
                         'sagela': SAGELANet, 
                         'gated': GatedGCNNet,
                         'my': MyEGNNNet}.get(gcn_type)
-        self.gcn = GCNUnit(in_channels=in_channels,
+        if gcn_type in ['gated','my','sagela','cluster_sagela','cluster_gated','cluster_my']:
+            self.gcn = GCNUnit(in_channels=in_channels,
                                 out_channels=spatial_channels,
+                                edge_channels=edge_channels,
                                 skip_connection=skip_connection)
+        else:
+            self.gcn = GCNUnit(in_channels=in_channels,
+                                out_channels=spatial_channels,
+                                skip_connection=skip_connection)           
 
     def forward(self, X, g):
         """
@@ -47,8 +53,8 @@ class GCNBlock(nn.Module):
 
 
 class Sandwich(nn.Module):
-    def __init__(self, num_nodes, num_edges, num_features,
-                 num_timesteps_input, num_timesteps_output, skip_connection=False,
+    def __init__(self, num_nodes, num_edges, num_features, 
+                 num_timesteps_input, num_timesteps_output, num_edge_features=1,skip_connection=False,
                  gcn_type='sage', gcn_partition='sample', hidden_size=64, **kwargs):
         """
         :param num_nodes: Number of nodes in the graph.
@@ -65,6 +71,7 @@ class Sandwich(nn.Module):
 
         self.gcn = GCNBlock(in_channels=hidden_size,
                             spatial_channels=hidden_size,
+                            edge_channels=num_edge_features,
                             skip_connection=skip_connection,
                             num_nodes=num_nodes,
                             gcn_type=gcn_type,

@@ -46,7 +46,6 @@ class NeighborSampleDataset(IterableDataset):
             'cent_n_id': data_flow[-1].n_id[data_flow[-1].res_n_id],
             'graph_n_id': data_flow[0].n_id
         }
-
         return sub_graph
 
     def __iter__(self):
@@ -135,10 +134,10 @@ class ClusterDataset(IterableDataset):
         ).to('cpu')
 
         cluster_data = ClusterData(
-            graph, num_parts=50, recursive=False, save_dir=None
+            graph, num_parts=100, recursive=False, save_dir=None
         )
 
-        cluster_loader = ClusterLoader(cluster_data, batch_size=10, shuffle=True, num_workers=0)
+        cluster_loader = ClusterLoader(cluster_data, batch_size=5, shuffle=True, num_workers=0)
 
         return cluster_loader
 

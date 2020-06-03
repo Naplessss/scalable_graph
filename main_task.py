@@ -19,7 +19,7 @@ import pandas as pd
 from tgcn import TGCN
 from stgcn import STGCN
 from sandwish import Sandwich
-from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj
+from preprocess import generate_dataset, load_nyc_sharing_bike_data, load_metr_la_data, get_normalized_adj, load_sf_sample_data
 from dataset import NeighborSampleDataset,ClusterDataset
 from base_task import add_config_to_argparse, BaseConfig, BasePytorchTask, \
     LOSS_KEY, BAR_KEY, SCALAR_LOG_KEY, VAL_SCORE_KEY
@@ -46,6 +46,7 @@ class STConfig(BaseConfig):
         self.num_timesteps_output = 3  # the length of the output time-series sequence
         self.skip_connection = False  # whether to use skip connection in gcn 
         self.lr = 1e-3  # the learning rate
+        self.hidden_size = 64 # the hidden size
 
 
 def get_model_class(model):
@@ -73,19 +74,26 @@ class WrapperNet(nn.Module):
         model_class = get_model_class(config.model)
         gcn_partition = None if config.gcn_partition is 'none' else config.gcn_partition
         self.net = model_class(
-            config.num_nodes,
-            config.num_edges,
-            config.num_features,
-            config.num_timesteps_input,
-            config.num_timesteps_output,
-            config.skip_connection,
-            config.gcn,
-            gcn_partition
+            num_nodes = config.num_nodes,
+            num_edges = config.num_edges,
+            num_features = config.num_features,
+            num_edge_features = config.num_edge_features,
+            num_timesteps_input = config.num_timesteps_input,
+            num_timesteps_output = config.num_timesteps_output,
+            skip_connection = config.skip_connection,
+            gcn_type = config.gcn,
+            gcn_partition = gcn_partition,
+            hidden_size = config.hidden_size
         )
+
         self.register_buffer('edge_index', torch.LongTensor(
             2, config.num_edges))
-        self.register_buffer('edge_weight', torch.FloatTensor(
-            config.num_edges))
+        if config.num_edge_features == 1:
+            self.register_buffer('edge_weight', torch.FloatTensor(
+                config.num_edges))
+        else:
+            self.register_buffer('edge_weight', torch.FloatTensor(
+                config.num_edges, config.num_edge_features))            
 
     def init_graph(self, edge_index, edge_weight):
         self.edge_index.copy_(edge_index)
@@ -114,9 +122,13 @@ class SpatialTemporalTask(BasePytorchTask):
 
         if self.config.dataset == "metr":
             A, X, means, stds = load_metr_la_data(data_dir)
-        else:
+        elif self.config.dataset == 'nyc-bike':
             A, X, means, stds = load_nyc_sharing_bike_data(data_dir)
+        elif self.config.dataset == 'sf-example':
+            edge_index, edge_weight, X, shenzhenmask = load_sf_sample_data(data_dir)
+            self.node_mask = shenzhenmask
 
+        X = X.astype(np.float32)
         split_line1 = int(X.shape[2] * 0.6)
         split_line2 = int(X.shape[2] * 0.8)
         train_original_data = X[:, :, :split_line1]
@@ -133,25 +145,48 @@ class SpatialTemporalTask(BasePytorchTask):
             num_timesteps_input=self.config.num_timesteps_input, num_timesteps_output=self.config.num_timesteps_output
         )
 
-        self.A = torch.from_numpy(A)
-        self.sparse_A = self.A.to_sparse()
-        self.edge_index = self.sparse_A._indices()
-        self.edge_weight = self.sparse_A._values()
+        if self.config.dataset in ['metr','nyc-bike']:
+            self.A = torch.from_numpy(A)
+            self.sparse_A = self.A.to_sparse()
+            self.edge_index = self.sparse_A._indices()
+            self.edge_weight = self.sparse_A._values()
 
-        contains_self_loops = torch_geometric.utils.contains_self_loops(self.edge_index)
-        self.log('Contains self loops: {}, but we add them.'.format(contains_self_loops))
-        if not contains_self_loops:
-            self.edge_index, self.edge_weight = torch_geometric.utils.add_self_loops(
-                self.edge_index, self.edge_weight,
-                num_nodes=self.A.shape[0]
-            )
+            # set config attributes for model initialization
+            self.config.num_nodes = self.A.shape[0]
+            self.config.num_edges = self.edge_weight.shape[0]
+            self.config.num_edge_features = 1
+            self.config.num_features = self.training_input.shape[3]
+            self.log('Total nodes: {}'.format(self.config.num_nodes))
+            self.log('Average degree: {:.3f}'.format(self.config.num_edges / self.config.num_nodes))
 
-        # set config attributes for model initialization
-        self.config.num_nodes = self.A.shape[0]
-        self.config.num_edges = self.edge_weight.shape[0]
-        self.config.num_features = self.training_input.shape[3]
-        self.log('Total nodes: {}'.format(self.config.num_nodes))
-        self.log('Average degree: {:.3f}'.format(self.config.num_edges / self.config.num_nodes))
+            contains_self_loops = torch_geometric.utils.contains_self_loops(self.edge_index)
+            self.log('Contains self loops: {}, but we add them.'.format(contains_self_loops))
+            if not contains_self_loops:
+                self.edge_index, self.edge_weight = torch_geometric.utils.add_self_loops(
+                    self.edge_index, self.edge_weight,
+                    num_nodes=self.config.num_nodes
+                )
+        
+        elif self.config.dataset in ['sf-example']:
+            self.edge_index = torch.from_numpy(edge_index)
+            self.edge_weight = torch.from_numpy(edge_weight)
+
+            # set config attributes for model initialization
+            self.config.num_nodes = len(shenzhenmask)
+            self.config.num_edges = self.edge_weight.shape[0]
+            self.config.num_edge_features = self.edge_weight.shape[1]   
+            self.config.num_features = self.training_input.shape[3] 
+            self.log('Total nodes: {}'.format(self.config.num_nodes))
+            self.log('Average degree: {:.3f}'.format(self.config.num_edges / self.config.num_nodes))
+
+            # contains_self_loops = torch_geometric.utils.contains_self_loops(self.edge_index)
+            # self.log('Contains self loops: {}, but we add them.'.format(contains_self_loops))
+            # if not contains_self_loops:
+            #     self.edge_index, _ = torch_geometric.utils.add_self_loops(
+            #         self.edge_index,
+            #         num_nodes=self.config.num_nodes
+            #     )
+
 
     def make_sample_dataloader(self, X, y, shuffle=False, use_dist_sampler=False):
         # return a data loader based on neighbor sampling
@@ -183,8 +218,15 @@ class SpatialTemporalTask(BasePytorchTask):
 
     def train_step(self, batch, batch_idx):
         X, y, g, rows = batch
-        y_hat = self.model(X, g)
+        y_hat = self.model(X, g)   # n_rows, cent_id, output_dim
+        # n_rows,n_cent_id,output_dim = y_hat.size()
         assert(y.size() == y_hat.size())
+        # if self.config.dataset in ['sf-example']:
+        #    mask_rows = self.node_mask[g['cent_n_id']]
+        #    mask_rows = mask_rows.reshape(1,-1,1).expand(n_rows,n_cent_id,output_dim)
+        #    y_hat = torch.masked_select(y_hat, mask_rows) 
+        #    y = torch.masked_select(y, mask_rows)
+        #    if y_hat.size()[0] == 0:
         loss = self.loss_func(y_hat, y)
         loss_i = loss.item()  # scalar loss
 

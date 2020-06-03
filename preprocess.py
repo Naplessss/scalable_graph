@@ -8,6 +8,23 @@ import calendar
 from dateutil.relativedelta import relativedelta
 from math import sin, asin, cos, radians, sqrt
 
+"""
+Load SF-Sample dataset
+"""
+
+def load_sf_sample_data(directory="data/SF-Example"):
+    edge_index, edge_features, edge_features_name = np.load(os.path.join(directory, 'edge.attr.npy'),allow_pickle=True)
+    node_features, node_features_name = np.load(os.path.join(directory, 'node.attr.npy'),allow_pickle=True)
+
+    edge_features = np.log1p(edge_features)  # normalized features use log1p
+    node_features = np.log1p(node_features)  # normalized features use log1p 
+    zonecode2idx = np.load(os.path.join(directory,'zonecode2idx.npy'),allow_pickle=True)
+    idx2zonecode = np.load(os.path.join(directory,'idx2zonecode.npy'),allow_pickle=True)
+    shenzhenmask = np.load(os.path.join(directory, 'shenzhenidxmask.npy'),allow_pickle=True)
+
+    # return [edge_index,edge_features,edge_features_name], [node_features,node_features_name], [zonecode2idx, idx2zonecode]
+    return edge_index, edge_features, node_features, shenzhenmask
+
 
 """
 Load NYC-Bike dataset
