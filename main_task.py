@@ -47,6 +47,7 @@ class STConfig(BaseConfig):
         self.skip_connection = False  # whether to use skip connection in gcn 
         self.lr = 1e-3  # the learning rate
         self.hidden_size = 64 # the hidden size
+        self.use_gcn = True # whether to use gcn in sandwish or pure k-rnn
 
 
 def get_model_class(model):
@@ -83,7 +84,8 @@ class WrapperNet(nn.Module):
             skip_connection = config.skip_connection,
             gcn_type = config.gcn,
             gcn_partition = gcn_partition,
-            hidden_size = config.hidden_size
+            hidden_size = config.hidden_size,
+            use_gcn = config.use_gcn
         )
 
         self.register_buffer('edge_index', torch.LongTensor(
@@ -129,8 +131,8 @@ class SpatialTemporalTask(BasePytorchTask):
             self.node_mask = shenzhenmask
 
         X = X.astype(np.float32)
-        split_line1 = int(X.shape[2] * 0.6)
-        split_line2 = int(X.shape[2] * 0.8)
+        split_line1 = int(X.shape[2] * 0.2)
+        split_line2 = int(X.shape[2] * 0.4)
         train_original_data = X[:, :, :split_line1]
         val_original_data = X[:, :, split_line1:split_line2]
         test_original_data = X[:, :, split_line2:]
@@ -281,14 +283,20 @@ class SpatialTemporalTask(BasePytorchTask):
         pred = pd.concat([x['pred'] for x in outputs], axis=0)
         label = pd.concat([x['label'] for x in outputs], axis=0)
 
-        pred = pred.groupby(['row_idx', 'node_idx', 'feat_idx']).mean()
-        label = label.groupby(['row_idx', 'node_idx', 'feat_idx']).mean()
+        pred = pred.groupby(['row_idx', 'node_idx', 'feat_idx']).mean().values
+        label = label.groupby(['row_idx', 'node_idx', 'feat_idx']).mean().values
 
-        loss = np.mean((pred.values - label.values) ** 2)
+        loss = np.mean(pred - label) ** 2
+
+        pred = pred[label>0]
+        label = label[label>0]
+
+        mape = np.mean(np.abs(np.expm1(pred) - np.expm1(label)) / np.expm1(label))
 
         out = {
             BAR_KEY: { '{}_loss'.format(tag) : loss },
-            SCALAR_LOG_KEY: { '{}_loss'.format(tag) : loss },
+            SCALAR_LOG_KEY: { '{}_loss'.format(tag) : loss ,
+                            '{}_mape'.format(tag) : mape},
             VAL_SCORE_KEY: -loss,  # a larger score corresponds to a better model
         }
 

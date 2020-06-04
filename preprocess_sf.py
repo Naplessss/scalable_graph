@@ -111,24 +111,44 @@ def normalized_egde_node(DIR,node,edge,threshold=0.05):
                                     names=['zonecode','tm'])
     node_flatten = pd.DataFrame(index=index).reset_index(drop=False)   
     node_flatten = pd.merge(node_flatten,node.replace('N',np.nan),how='left',on=['zonecode','tm']).fillna(0.0)
-    node_features =  ['outflow_transfer_volume', 'inflow_user_volume',
-        'inflow_transfer_volume', 'inflow_dest_volume',
-        'outflow_delivery_volume', 'outflow_delivery_success',
-        'outflow_delivery_fail', 'inflow_lastzone_volume',
-        'inflow_firstzone_volume', 'delivey_avg_tm']
+    node_features = [
+        'outflow_delivery_volume',   # LABEL
+        'outflow_transfer_volume', 
+        'inflow_user_volume',
+       'inflow_transfer_volume', 
+       'inflow_dest_volume',
+       'outflow_delivery_success',
+       'outflow_delivery_fail', 
+       'inflow_lastzone_volume',
+       'inflow_firstzone_volume',
+       'inflow_total_volume',
+       'outflow_total_volume']
     node_flatten[node_features] = node_flatten[node_features].astype(float)
     edge.to_csv(os.path.join(DIR,'edge.3258.csv'))
     node_flatten.to_csv(os.path.join(DIR,'node.3258.csv'))  
 
 def dup_daily_node(DIR, periods=7*12):
-    node_features =  ['outflow_transfer_volume', 'inflow_user_volume',
-        'inflow_transfer_volume', 'inflow_dest_volume',
-        'outflow_delivery_volume', 'outflow_delivery_success',
-        'outflow_delivery_fail', 'inflow_lastzone_volume',
-        'inflow_firstzone_volume']
+    node_features = [
+        'outflow_delivery_volume',   # LABEL
+        'outflow_transfer_volume', 
+        'inflow_user_volume',
+       'inflow_transfer_volume', 
+       'inflow_dest_volume',
+       'outflow_delivery_success',
+       'outflow_delivery_fail', 
+       'inflow_lastzone_volume',
+       'inflow_firstzone_volume',
+       'inflow_total_volume',
+       'outflow_total_volume']
     node_flatten = pd.read_csv(os.path.join(DIR,'node.3258.csv'))
     node_flatten['tm_day'] = node_flatten['tm'].map(lambda x:x[:-3])
     node_flatten_day = node_flatten.groupby(['tm_day','zonecode'])[node_features].sum()
+    node_label = pd.read_csv(os.path.join(DIR,'zone_history_sent.csv'))
+    node_label.columns = ['zonecode','LABEL','tm_day','TYPE']
+    node_label.tm_day = node_label.tm_day.map(lambda x:'-'.join([str(x)[:4],str(x)[4:6],str(x)[6:8]]))
+    node_label = node_label[['zonecode','tm_day','LABEL']]
+    node_flatten_day = pd.merge(node_flatten_day,node_label,on=['zonecode','tm_day'],how='left')
+    node_flatten_day = node_flatten_day.set_index(['tm_day','zonecode'])
 
     node_flatten_test = node_flatten_day.loc['2020-04-07']
     tm_index = ['2020-04-01','2020-04-02','2020-04-03','2020-04-04','2020-04-05','2020-04-06','2020-04-06']
@@ -160,6 +180,7 @@ def collect_edge_node(DIR, add_self_loop=True):
     edge = pd.read_csv(os.path.join(DIR,'edge.3258.csv'))
     edge_features = [item for item in edge.columns if '_hour_' in item or '_week_' in item]
     node_features = [
+        # 'LABEL',
         'outflow_delivery_volume',   # LABEL
         'outflow_transfer_volume', 
         'inflow_user_volume',
@@ -168,7 +189,9 @@ def collect_edge_node(DIR, add_self_loop=True):
        'outflow_delivery_success',
        'outflow_delivery_fail', 
        'inflow_lastzone_volume',
-       'inflow_firstzone_volume']
+       'inflow_firstzone_volume',
+       'inflow_total_volume',
+       'outflow_total_volume']
 
     node_zonecode = sorted(node_flatten_sample.zonecode.unique())
     zonecode2idx = {item:i for i,item in enumerate(node_zonecode)}

@@ -55,14 +55,14 @@ class SAGELA(PyG.SAGEConv):
 
 
 class SAGELANet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
+    def __init__(self, in_channels, out_channels, edge_channels=1, spatial_channels=16, skip_connection=False):
         super(SAGELANet, self).__init__()
         self.skip_connection = skip_connection
         conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = SAGELA(
-            in_channels, spatial_channels, edge_channels=1, node_dim=1)
+            in_channels, spatial_channels, edge_channels=edge_channels, node_dim=1)
         self.conv2 = SAGELA(
-            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=edge_channels, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
@@ -72,7 +72,7 @@ class SAGELANet(nn.Module):
         res_n_id = g['res_n_id']
 
         X = self.conv1(
-            (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0].unsqueeze(-1), size=size[0])
+            (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0], size=size[0])
 
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
@@ -80,33 +80,33 @@ class SAGELANet(nn.Module):
             X = F.leaky_relu(X)
 
         X = self.conv2(
-            (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
+            (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1], size=size[1])
 
         return X
 
 
 class ClusterSAGELANet(nn.Module):
-    def __init__(self, in_channels, out_channels, spatial_channels=16, skip_connection=False):
+    def __init__(self, in_channels, out_channels, edge_channels=1, spatial_channels=16, skip_connection=False):
         super(ClusterSAGELANet, self).__init__()
         self.skip_connection = skip_connection
         conv2_in_channels = spatial_channels * 2 if self.skip_connection else spatial_channels
         self.conv1 = SAGELA(
-            in_channels, spatial_channels, edge_channels=1, node_dim=1)
+            in_channels, spatial_channels, edge_channels=edge_channels, node_dim=1)
         self.conv2 = SAGELA(
-            conv2_in_channels, out_channels, edge_channels=1, node_dim=1)
+            conv2_in_channels, out_channels, edge_channels=edge_channels, node_dim=1)
 
     def forward(self, X, g):
         edge_index = g['edge_index']
         edge_weight = g['edge_weight']
 
-        X = self.conv1(X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
+        X = self.conv1(X, edge_index, edge_feature=edge_weight)
 
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
         else:
             X = F.leaky_relu(X)  
 
-        X = self.conv2(X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
+        X = self.conv2(X, edge_index, edge_feature=edge_weight)
 
         return X
 
@@ -283,8 +283,8 @@ class MyEGNNConv(MessagePassing):
 
         aggr_out = self.linear_concat(torch.cat([x, aggr_out], dim=-1))
         # aggr_out = self.layer_norm(aggr_out)
-        batch_norm = nn.BatchNorm1d(aggr_out.shape[1]).to(x.device)
-        aggr_out = batch_norm(aggr_out)
+        # batch_norm = nn.BatchNorm1d(aggr_out.shape[1]).to(x.device)
+        # aggr_out = batch_norm(aggr_out)
         
         return x + F.relu(aggr_out)
 
@@ -307,7 +307,7 @@ class MyEGNNNet(nn.Module):
         res_n_id = g['res_n_id']
 
         X = self.conv1(
-            (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0].unsqueeze(-1), size=size[0])
+            (X, X[:, res_n_id[0]]), edge_index[0], edge_feature=edge_weight[0], size=size[0])
 
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
@@ -315,7 +315,7 @@ class MyEGNNNet(nn.Module):
             X = F.leaky_relu(X)
 
         X = self.conv2(
-            (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1].unsqueeze(-1), size=size[1])
+            (X, X[:, res_n_id[1]]), edge_index[1], edge_feature=edge_weight[1], size=size[1])
 
         return X
 
@@ -334,7 +334,7 @@ class ClusterMyEGNNNet(nn.Module):
         edge_weight = g['edge_weight']
 
         X = self.conv1(
-            X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
+            X, edge_index, edge_feature=edge_weight)
 
         if self.skip_connection:
             X = torch.cat((F.leaky_relu(X), X), dim=-1)
@@ -342,6 +342,6 @@ class ClusterMyEGNNNet(nn.Module):
             X = F.leaky_relu(X)
 
         X = self.conv2(
-            X, edge_index, edge_feature=edge_weight.unsqueeze(-1))
+            X, edge_index, edge_feature=edge_weight)
 
         return X
